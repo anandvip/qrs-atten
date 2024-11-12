@@ -62,6 +62,7 @@
             font-size: 1rem;
             cursor: pointer;
             margin-bottom: 0.5rem;
+            font-weight: 500;
             transition: opacity 0.2s;
         }
 
@@ -88,6 +89,13 @@
             border-radius: 4px;
             margin: 1rem 0;
         }
+
+        .loading {
+            text-align: center;
+            padding: 1rem;
+            color: #64748b;
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -95,6 +103,7 @@
     <div class="container" id="registerView">
         <h1>Employee Registration</h1>
         <div id="regAlert" class="alert"></div>
+        <div id="regLoading" class="loading">Processing...</div>
         <form id="registerForm">
             <div class="form-group">
                 <label>Full Name</label>
@@ -120,6 +129,7 @@
     <div class="container" id="attendanceView" style="display:none;">
         <h1>QRS Attendance</h1>
         <div id="attendanceAlert" class="alert"></div>
+        <div id="attendanceLoading" class="loading">Loading...</div>
         <h2 id="welcomeText"></h2>
         
         <div class="status-box">
@@ -133,7 +143,8 @@
     </div>
 
     <script type="module">
-        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js';
+        // Import Firebase
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.6.0/firebase-app.js';
         import { 
             getFirestore, 
             collection, 
@@ -143,9 +154,9 @@
             where, 
             orderBy, 
             limit 
-        } from 'https://www.gstatic.com/firebasejs/10.7.0/firestore.js';
+        } from 'https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore.js';
 
-        // Initialize Firebase with your config
+        // Initialize Firebase
         const app = initializeApp({
             apiKey: "AIzaSyBvPYd8ksZLlfLWz2TUxk43ee9hZkMvxVU",
             authDomain: "qrs-sales.firebaseapp.com",
@@ -158,13 +169,17 @@
         const db = getFirestore(app);
         let currentUser = null;
 
-        // Helper Functions
+        // Utility Functions
         function showAlert(message, type, viewId) {
             const alert = document.getElementById(viewId + 'Alert');
             alert.style.backgroundColor = type === 'success' ? '#16a34a' : '#dc2626';
             alert.textContent = message;
             alert.style.display = 'block';
             setTimeout(() => alert.style.display = 'none', 3000);
+        }
+
+        function setLoading(viewId, isLoading) {
+            document.getElementById(viewId + 'Loading').style.display = isLoading ? 'block' : 'none';
         }
 
         function switchView(toAttendance) {
@@ -175,6 +190,7 @@
             }
         }
 
+        // Collection Setup
         async function setupCollections() {
             try {
                 const collections = ['employees', 'attendance'];
@@ -197,6 +213,7 @@
         // Registration Handler
         document.getElementById('registerForm').addEventListener('submit', async (e) => {
             e.preventDefault();
+            setLoading('reg', true);
             
             try {
                 const emailCheck = await getDocs(
@@ -206,6 +223,7 @@
 
                 if (!emailCheck.empty) {
                     showAlert('Email already registered', 'error', 'reg');
+                    setLoading('reg', false);
                     return;
                 }
 
@@ -229,11 +247,15 @@
             } catch (error) {
                 console.error('Registration error:', error);
                 showAlert('Registration failed', 'error', 'reg');
+            } finally {
+                setLoading('reg', false);
             }
         });
 
         // Attendance Handlers
         async function recordAttendance(type) {
+            setLoading('attendance', true);
+            
             try {
                 const record = {
                     employeeId: currentUser.id,
@@ -244,10 +266,8 @@
 
                 await addDoc(collection(db, "attendance"), record);
                 
-                const checkInBtn = document.getElementById('checkInBtn');
-                const checkOutBtn = document.getElementById('checkOutBtn');
-                checkInBtn.style.display = type === 'check-in' ? 'none' : 'block';
-                checkOutBtn.style.display = type === 'check-in' ? 'block' : 'none';
+                document.getElementById('checkInBtn').style.display = type === 'check-in' ? 'none' : 'block';
+                document.getElementById('checkOutBtn').style.display = type === 'check-in' ? 'block' : 'none';
 
                 showAlert(
                     type === 'check-in' ? 'Checked in successfully' : 'Checked out successfully',
@@ -259,10 +279,14 @@
             } catch (error) {
                 console.error('Attendance error:', error);
                 showAlert('Failed to record attendance', 'error', 'attendance');
+            } finally {
+                setLoading('attendance', false);
             }
         }
 
         async function loadLastRecord() {
+            setLoading('attendance', true);
+            
             try {
                 const q = query(
                     collection(db, "attendance"),
@@ -290,6 +314,8 @@
             } catch (error) {
                 console.error('Error loading record:', error);
                 showAlert('Failed to load attendance record', 'error', 'attendance');
+            } finally {
+                setLoading('attendance', false);
             }
         }
 
@@ -301,7 +327,7 @@
             location.reload();
         });
 
-        // Initialize System
+        // System Initialization
         async function startSystem() {
             try {
                 await setupCollections();
