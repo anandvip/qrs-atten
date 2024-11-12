@@ -3,37 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QRS Employee Attendance System</title>
+    <title>QRS Attendance System</title>
     <style>
         :root {
             --primary: #2563eb;
             --success: #16a34a;
-            --warning: #ca8a04;
             --danger: #dc2626;
             --background: #f8fafc;
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-family: -apple-system, system-ui, sans-serif;
             line-height: 1.6;
-            background: var(--background);
             margin: 0;
             padding: 20px;
+            background: var(--background);
         }
 
         .container {
             max-width: 500px;
             margin: 0 auto;
-            background: white;
             padding: 2rem;
+            background: white;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
         h1, h2 {
+            text-align: center;
             color: #1e293b;
             margin-bottom: 1.5rem;
-            text-align: center;
         }
 
         .form-group {
@@ -44,7 +43,6 @@
             display: block;
             margin-bottom: 0.5rem;
             font-weight: 500;
-            color: #4b5563;
         }
 
         input {
@@ -62,8 +60,8 @@
             border: none;
             border-radius: 4px;
             font-size: 1rem;
-            font-weight: 500;
             cursor: pointer;
+            margin-bottom: 0.5rem;
             transition: opacity 0.2s;
         }
 
@@ -71,27 +69,10 @@
             opacity: 0.9;
         }
 
-        .btn-primary {
-            background: var(--primary);
-            color: white;
-        }
-
-        .btn-success {
-            background: var(--success);
-            color: white;
-        }
-
-        .btn-danger {
-            background: var(--danger);
-            color: white;
-        }
-
-        .status-box {
-            margin-top: 1rem;
-            padding: 1rem;
-            border-radius: 4px;
-            background: #f1f5f9;
-        }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-success { background: var(--success); color: white; }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-secondary { background: #64748b; color: white; }
 
         .alert {
             padding: 1rem;
@@ -101,27 +82,20 @@
             display: none;
         }
 
-        .alert-success { background: var(--success); }
-        .alert-error { background: var(--danger); }
-
-        .loading {
-            text-align: center;
+        .status-box {
+            background: #f1f5f9;
+            padding: 1rem;
+            border-radius: 4px;
             margin: 1rem 0;
-            display: none;
-        }
-
-        #logout-btn {
-            margin-top: 1rem;
-            background: #64748b;
-            color: white;
         }
     </style>
 </head>
 <body>
-    <div class="container" id="registration-container">
+    <!-- Registration View -->
+    <div class="container" id="registerView">
         <h1>Employee Registration</h1>
-        <div id="reg-alert" class="alert"></div>
-        <form id="registration-form">
+        <div id="regAlert" class="alert"></div>
+        <form id="registerForm">
             <div class="form-group">
                 <label>Full Name</label>
                 <input type="text" id="fullName" required minlength="3">
@@ -142,19 +116,20 @@
         </form>
     </div>
 
-    <div class="container" id="attendance-container" style="display:none;">
-        <h1>Attendance System</h1>
-        <div id="att-alert" class="alert"></div>
-        <h2 id="welcome-text"></h2>
-        <div class="status-box" id="status-box">
-            <p>Current Status: <span id="current-status">Loading...</span></p>
-            <p>Last Record: <span id="last-record">Loading...</span></p>
+    <!-- Attendance View -->
+    <div class="container" id="attendanceView" style="display:none;">
+        <h1>QRS Attendance</h1>
+        <div id="attendanceAlert" class="alert"></div>
+        <h2 id="welcomeText"></h2>
+        
+        <div class="status-box">
+            <p>Status: <span id="currentStatus">Not Available</span></p>
+            <p>Last Record: <span id="lastRecord">Not Available</span></p>
         </div>
-        <div style="margin-top: 1.5rem;">
-            <button id="check-in-btn" class="btn-success">Check In</button>
-            <button id="check-out-btn" class="btn-danger" style="display:none;">Check Out</button>
-        </div>
-        <button id="logout-btn">Logout</button>
+
+        <button id="checkInBtn" class="btn-success">Check In</button>
+        <button id="checkOutBtn" class="btn-danger" style="display:none;">Check Out</button>
+        <button id="logoutBtn" class="btn-secondary">Logout</button>
     </div>
 
     <script type="module">
@@ -170,7 +145,7 @@
             limit 
         } from 'https://www.gstatic.com/firebasejs/10.7.0/firestore.js';
 
-        // Initialize Firebase
+        // Initialize Firebase with your config
         const app = initializeApp({
             apiKey: "AIzaSyBvPYd8ksZLlfLWz2TUxk43ee9hZkMvxVU",
             authDomain: "qrs-sales.firebaseapp.com",
@@ -183,42 +158,47 @@
         const db = getFirestore(app);
         let currentUser = null;
 
-        // Initialize collections and check if they exist
-        async function initializeCollections() {
+        // Helper Functions
+        function showAlert(message, type, viewId) {
+            const alert = document.getElementById(viewId + 'Alert');
+            alert.style.backgroundColor = type === 'success' ? '#16a34a' : '#dc2626';
+            alert.textContent = message;
+            alert.style.display = 'block';
+            setTimeout(() => alert.style.display = 'none', 3000);
+        }
+
+        function switchView(toAttendance) {
+            document.getElementById('registerView').style.display = toAttendance ? 'none' : 'block';
+            document.getElementById('attendanceView').style.display = toAttendance ? 'block' : 'none';
+            if (toAttendance && currentUser) {
+                document.getElementById('welcomeText').textContent = `Welcome, ${currentUser.fullName}`;
+            }
+        }
+
+        async function setupCollections() {
             try {
                 const collections = ['employees', 'attendance'];
                 for (const collName of collections) {
-                    const collRef = collection(db, collName);
-                    const snapshot = await getDocs(query(collRef, limit(1)));
+                    const snapshot = await getDocs(query(collection(db, collName), limit(1)));
                     if (snapshot.empty) {
-                        await addDoc(collRef, {
-                            _init: true,
-                            createdAt: new Date()
+                        await addDoc(collection(db, collName), {
+                            _initialized: true,
+                            timestamp: new Date()
                         });
                     }
                 }
                 return true;
             } catch (error) {
-                console.error('Collection initialization failed:', error);
+                console.error('Collection setup failed:', error);
                 return false;
             }
         }
 
-        // Show alert message
-        function showAlert(message, type, container) {
-            const alert = document.getElementById(`${container}-alert`);
-            alert.textContent = message;
-            alert.className = `alert alert-${type}`;
-            alert.style.display = 'block';
-            setTimeout(() => alert.style.display = 'none', 3000);
-        }
-
-        // Registration form handler
-        document.getElementById('registration-form').addEventListener('submit', async (e) => {
+        // Registration Handler
+        document.getElementById('registerForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
             try {
-                // Check for existing email
                 const emailCheck = await getDocs(
                     query(collection(db, "employees"), 
                     where("email", "==", document.getElementById('email').value))
@@ -241,12 +221,10 @@
                 employee.id = docRef.id;
                 
                 localStorage.setItem('currentUser', JSON.stringify(employee));
-                showAlert('Registration successful', 'success', 'reg');
+                currentUser = employee;
                 
-                setTimeout(() => {
-                    currentUser = employee;
-                    showAttendanceSystem();
-                }, 1000);
+                showAlert('Registration successful', 'success', 'reg');
+                setTimeout(() => switchView(true), 1000);
 
             } catch (error) {
                 console.error('Registration error:', error);
@@ -254,7 +232,7 @@
             }
         });
 
-        // Attendance handling
+        // Attendance Handlers
         async function recordAttendance(type) {
             try {
                 const record = {
@@ -265,29 +243,23 @@
                 };
 
                 await addDoc(collection(db, "attendance"), record);
-                showAlert(`${type === 'check-in' ? 'Checked in' : 'Checked out'} successfully`, 'success', 'att');
-                updateAttendanceUI(type);
+                
+                const checkInBtn = document.getElementById('checkInBtn');
+                const checkOutBtn = document.getElementById('checkOutBtn');
+                checkInBtn.style.display = type === 'check-in' ? 'none' : 'block';
+                checkOutBtn.style.display = type === 'check-in' ? 'block' : 'none';
+
+                showAlert(
+                    type === 'check-in' ? 'Checked in successfully' : 'Checked out successfully',
+                    'success',
+                    'attendance'
+                );
+                
                 loadLastRecord();
             } catch (error) {
-                console.error('Attendance recording error:', error);
-                showAlert('Failed to record attendance', 'error', 'att');
+                console.error('Attendance error:', error);
+                showAlert('Failed to record attendance', 'error', 'attendance');
             }
-        }
-
-        // UI Updates
-        function showAttendanceSystem() {
-            document.getElementById('registration-container').style.display = 'none';
-            document.getElementById('attendance-container').style.display = 'block';
-            document.getElementById('welcome-text').textContent = `Welcome, ${currentUser.fullName}`;
-            loadLastRecord();
-        }
-
-        function updateAttendanceUI(type) {
-            const checkInBtn = document.getElementById('check-in-btn');
-            const checkOutBtn = document.getElementById('check-out-btn');
-            
-            checkInBtn.style.display = type === 'check-in' ? 'none' : 'block';
-            checkOutBtn.style.display = type === 'check-in' ? 'block' : 'none';
         }
 
         async function loadLastRecord() {
@@ -305,46 +277,48 @@
                     const record = snapshot.docs[0].data();
                     const timestamp = record.timestamp.toDate();
                     
-                    document.getElementById('current-status').textContent = 
+                    document.getElementById('currentStatus').textContent = 
                         record.type === 'check-in' ? 'Checked In' : 'Checked Out';
-                    document.getElementById('last-record').textContent = 
+                    document.getElementById('lastRecord').textContent = 
                         `${timestamp.toLocaleDateString()} ${timestamp.toLocaleTimeString()}`;
-                    
-                    updateAttendanceUI(record.type);
-                } else {
-                    document.getElementById('current-status').textContent = 'No records';
-                    document.getElementById('last-record').textContent = 'N/A';
+
+                    document.getElementById('checkInBtn').style.display = 
+                        record.type === 'check-in' ? 'none' : 'block';
+                    document.getElementById('checkOutBtn').style.display = 
+                        record.type === 'check-in' ? 'block' : 'none';
                 }
             } catch (error) {
-                console.error('Error loading last record:', error);
-                showAlert('Failed to load attendance record', 'error', 'att');
+                console.error('Error loading record:', error);
+                showAlert('Failed to load attendance record', 'error', 'attendance');
             }
         }
 
         // Event Listeners
-        document.getElementById('check-in-btn').addEventListener('click', () => recordAttendance('check-in'));
-        document.getElementById('check-out-btn').addEventListener('click', () => recordAttendance('check-out'));
-        document.getElementById('logout-btn').addEventListener('click', () => {
+        document.getElementById('checkInBtn').addEventListener('click', () => recordAttendance('check-in'));
+        document.getElementById('checkOutBtn').addEventListener('click', () => recordAttendance('check-out'));
+        document.getElementById('logoutBtn').addEventListener('click', () => {
             localStorage.removeItem('currentUser');
             location.reload();
         });
 
-        // Initialize App
-        async function initializeApp() {
+        // Initialize System
+        async function startSystem() {
             try {
-                await initializeCollections();
+                await setupCollections();
                 const savedUser = localStorage.getItem('currentUser');
+                
                 if (savedUser) {
                     currentUser = JSON.parse(savedUser);
-                    showAttendanceSystem();
+                    switchView(true);
+                    loadLastRecord();
                 }
             } catch (error) {
-                console.error('Initialization error:', error);
+                console.error('System initialization error:', error);
                 showAlert('System initialization failed', 'error', 'reg');
             }
         }
 
-        initializeApp();
+        startSystem();
     </script>
 </body>
 </html>
